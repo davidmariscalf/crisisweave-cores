@@ -13,6 +13,7 @@ FORBIDDEN_PUBLIC_KEYS = {
     "street_address", "exact_address", "date_of_birth", "dob", "government_id", "ssn"
 }
 EXPLICIT_WORKSITE_SOURCES = {"request", "assessment", "partner_import", "synthetic"}
+PUBLIC_LOCATION_PRECISIONS = {"approximate", "area_only"}
 
 
 def canonical_json(value: Any) -> str:
@@ -65,6 +66,22 @@ def validate_source(source: Any) -> None:
         raise ValueError("source.source_id is required")
 
 
+def _is_two_decimal_point(geometry: dict[str, Any]) -> bool:
+    lon, lat = geometry["coordinates"]
+    return abs(float(lon) - round(float(lon), 2)) < 1e-9 and abs(float(lat) - round(float(lat), 2)) < 1e-9
+
+
+def validate_public_worksite_location(worksite: dict[str, Any]) -> None:
+    source = worksite.get("source") or {}
+    if source.get("type") == "synthetic":
+        return
+    precision = worksite.get("location_precision")
+    if precision not in PUBLIC_LOCATION_PRECISIONS:
+        raise ValueError("non-synthetic public worksites must declare approximate or area_only location_precision")
+    if precision == "approximate" and not _is_two_decimal_point(worksite["geometry"]):
+        raise ValueError("approximate public worksite coordinates must be rounded to at most two decimal places")
+
+
 def validate_event(event: dict[str, Any]) -> None:
     if not str(event.get("id") or "").strip():
         raise ValueError("event.id is required")
@@ -86,6 +103,7 @@ def validate_worksite(worksite: dict[str, Any]) -> None:
         raise ValueError("worksite source must represent an explicit request, assessment, partner import or synthetic demo")
     validate_point_geometry(worksite.get("geometry"), required=True)
     assert_public_safe(worksite)
+    validate_public_worksite_location(worksite)
 
 
 def load_jsonl(path: str | Path) -> list[dict[str, Any]]:
