@@ -88,6 +88,24 @@ class ContractTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             validate_worksite(bad)
 
+    def test_public_worksite_rejects_operational_only_fields(self):
+        for field, value in (
+            ("assigned_team", "team-a"),
+            ("coordinator_instructions", "Call resident"),
+            ("description", "Operational free text"),
+        ):
+            worksite = self.base_worksite()
+            worksite[field] = value
+            with self.subTest(field=field), self.assertRaises(ValueError):
+                validate_worksite(worksite)
+
+    def test_public_worksite_rejects_partner_url_and_arbitrary_source_metadata(self):
+        for field, value in (("url", "https://partner.example/case/1"), ("metadata", {"case": "1"})):
+            worksite = self.base_worksite()
+            worksite["source"][field] = value
+            with self.subTest(field=field), self.assertRaises(ValueError):
+                validate_worksite(worksite)
+
     def test_real_public_worksite_requires_approximate_location(self):
         real = self.base_worksite("partner_import")
         real["geometry"] = {"type": "Point", "coordinates": [-3.70379, 40.41678]}
