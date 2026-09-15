@@ -14,6 +14,8 @@ FORBIDDEN_PUBLIC_KEYS = {
     "survivor_name", "full_name", "phone", "phone_number", "email", "email_address",
     "street_address", "exact_address", "date_of_birth", "dob", "government_id", "ssn"
 }
+FORBIDDEN_PUBLIC_WORKSITE_FIELDS = {"assigned_team", "coordinator_instructions", "description"}
+PUBLIC_WORKSITE_SOURCE_KEYS = {"type", "name", "source_id"}
 EXPLICIT_WORKSITE_SOURCES = {"request", "assessment", "partner_import", "synthetic"}
 PUBLIC_LOCATION_PRECISIONS = {"approximate", "area_only"}
 MAX_JSONL_BYTES = 64 * 1024 * 1024
@@ -119,6 +121,18 @@ def validate_public_worksite_location(worksite: dict[str, Any]) -> None:
         raise ValueError("approximate public worksite coordinates must be rounded to at most two decimal places")
 
 
+def validate_public_worksite_projection(worksite: dict[str, Any]) -> None:
+    present = sorted(field for field in FORBIDDEN_PUBLIC_WORKSITE_FIELDS if field in worksite)
+    if present:
+        raise ValueError("operational-only fields are not allowed in public worksites: " + ", ".join(present))
+    source = worksite.get("source")
+    if not isinstance(source, dict):
+        raise ValueError("source must be an object")
+    extra_source = sorted(set(source) - PUBLIC_WORKSITE_SOURCE_KEYS)
+    if extra_source:
+        raise ValueError("public worksite source contains operational/arbitrary fields: " + ", ".join(extra_source))
+
+
 def validate_event(event: dict[str, Any]) -> None:
     if not isinstance(event, dict):
         raise ValueError("event must be an object")
@@ -160,8 +174,6 @@ def validate_worksite(worksite: dict[str, Any]) -> None:
         ("priority", 64), ("area", 1000),
     ):
         _bounded_text(worksite.get(key), f"worksite.{key}", required=True, max_chars=limit)
-    _bounded_text(worksite.get("description"), "worksite.description", max_chars=20_000)
-    _bounded_text(worksite.get("coordinator_instructions"), "worksite.coordinator_instructions", max_chars=20_000)
 
     source = worksite.get("source")
     validate_source(source)
@@ -169,6 +181,7 @@ def validate_worksite(worksite: dict[str, Any]) -> None:
         raise ValueError("worksite source must represent an explicit request, assessment, partner import or synthetic demo")
     validate_point_geometry(worksite.get("geometry"), required=True)
     assert_public_safe(worksite)
+    validate_public_worksite_projection(worksite)
     validate_public_worksite_location(worksite)
 
 
